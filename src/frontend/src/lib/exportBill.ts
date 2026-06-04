@@ -158,26 +158,7 @@ function isIOSSafari(): boolean {
 }
 
 // ─── Download helper ──────────────────────────────────────────────────────────
-
-/**
- * Convert a Blob to a base64 data URL.
- * FileReader.readAsDataURL is supported on all browsers including iOS Safari.
- */
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    if (typeof FileReader === "undefined") {
-      // Very old browser — fall back to blob URL
-      resolve(URL.createObjectURL(blob));
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error("FileReader failed"));
-    reader.readAsDataURL(blob);
-  });
-}
-
-// ---> ADD This Helper to convert mobile asset blobs to base64 <---
+// Helper to convert mobile asset blobs to base64 string chunks safely
 function mobileBlobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -265,7 +246,9 @@ async function triggerDownload(
     console.error("triggerDownload: all download approaches failed", err);
     throw err;
   }
-}
+  }
+                    
+
 
 
 // ─── Canvas → Blob (with fallback for older browsers) ────────────────────────
