@@ -25,10 +25,11 @@ jobs:
         cd src/frontend
         pnpm build
       
-    - name: Setup Capacitor and Android Platform
+    - name: Setup Capacitor and Android Native Plugins
       run: |
         cd src/frontend
         pnpm add @capacitor/core @capacitor/cli @capacitor/android
+        pnpm add @capacitor/browser @capacitor/filesystem @capacitor/preferences
         npx cap init "JCB Billing" "com.jcbbilling.app" --web-dir=dist
         npx cap add android
         npx cap sync android
