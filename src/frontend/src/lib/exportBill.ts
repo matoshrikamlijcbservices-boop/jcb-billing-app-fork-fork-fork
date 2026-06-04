@@ -1,10 +1,15 @@
 // Export utilities for JCB bills
-// PNG: pure Canvas 2D API — no html2canvas, works in ALL browsers
-// PDF batch: pure jsPDF vector text — no screenshots, <100KB per customer
+// PNG: pure Canvas 2D API no html2canvas, works in ALL browsers
+// PDF batch: pure jsPDF vector text no screenshots, <100KB per customer
 
 import type { Bill, PaymentEntry } from "@/types";
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
+
+// ---> ADD THESE TWO LINES FOR ANDROID PERMISSIONS AND STORAGE <---
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Capacitor } from '@capacitor/core';
+
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -172,25 +177,44 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-/**
- * Cross-platform reliable download:
- * - Converts Blob to base64 data URL via FileReader
- * - Uses anchor.download + href = data URL for all browsers
- * - Data URLs work on iOS Safari, Android Chrome, Firefox, Edge
- * - Does NOT rely on blob URLs (URL.createObjectURL) which fail on mobile
- * - Does NOT use window.open() for iOS — data URL anchor is compatible
- */
+// ---> ADD This Helper to convert mobile asset blobs to base64 <---
+function mobileBlobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const base64String = dataUrl.split(',')[1];
+      resolve(base64String);
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
 async function triggerDownload(
   blob: Blob,
   filename: string,
   _mimeType: string,
 ): Promise<void> {
-  // iOS Safari doesn't support URL.createObjectURL for downloads —
-  // it opens the file in a new tab instead of downloading.
-  // For all other platforms, URL.createObjectURL is the most reliable approach.
-  // Data URLs can be too large for browser download limits (typically ~2MB cap on some browsers).
+  // 1. NATIVE ANDROID ENVIRONMENT TRIGGER
+  if (Capacitor.getPlatform() === 'android') {
+    try {
+      const base64Data = await mobileBlobToBase64(blob);
+      await Filesystem.writeFile({
+        path: filename,
+        data: base64Data,
+        directory: Directory.Documents,
+      });
+      alert(`Saved successfully to your Documents folder as: ${filename}`);
+      return;
+    } catch (err) {
+      console.error("Native Android save failed, attempting web fallback", err);
+      alert("Storage write failed. Please check your app storage permissions.");
+    }
+  }
+
+  // 2. ORIGINAL WEBKIT/IOS FALLBACK
   if (isIOSSafari()) {
-    // iOS: convert to base64 data URL and use anchor download
     try {
       const dataUrl = await blobToDataUrl(blob);
       const a = document.createElement("a");
@@ -200,18 +224,15 @@ async function triggerDownload(
       document.body.appendChild(a);
       a.click();
       setTimeout(() => {
-        try {
-          document.body.removeChild(a);
-        } catch {
-          /* already removed */
-        }
+        try { document.body.removeChild(a); } catch {}
       }, 1000);
       return;
     } catch (err) {
       console.error("triggerDownload: iOS data URL approach failed", err);
     }
   }
-  // Primary approach for all non-iOS browsers: blob URL
+
+  // 3. ORIGINAL DESKTOP WEB FALLBACK
   try {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -220,23 +241,15 @@ async function triggerDownload(
     a.style.display = "none";
     document.body.appendChild(a);
     a.click();
-    // Remove anchor after a short delay
     setTimeout(() => {
-      try {
-        document.body.removeChild(a);
-      } catch {
-        /* already removed */
-      }
+      try { document.body.removeChild(a); } catch {}
       URL.revokeObjectURL(url);
     }, 2000);
     return;
   } catch (err) {
-    console.error(
-      "triggerDownload: blob URL approach failed, falling back to data URL",
-      err,
-    );
+    console.error("triggerDownload: blob URL approach failed, falling back to data URL", err);
   }
-  // Last resort fallback: data URL
+
   try {
     const dataUrl = await blobToDataUrl(blob);
     const a = document.createElement("a");
@@ -246,17 +259,14 @@ async function triggerDownload(
     document.body.appendChild(a);
     a.click();
     setTimeout(() => {
-      try {
-        document.body.removeChild(a);
-      } catch {
-        /* already removed */
-      }
+      try { document.body.removeChild(a); } catch {}
     }, 1000);
   } catch (err) {
     console.error("triggerDownload: all download approaches failed", err);
     throw err;
   }
 }
+
 
 // ─── Canvas → Blob (with fallback for older browsers) ────────────────────────
 
